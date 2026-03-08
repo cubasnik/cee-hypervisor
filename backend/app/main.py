@@ -8,11 +8,12 @@ import xml.etree.ElementTree as ET
 import libvirt
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.core.database import init_db
-from app.api.endpoints import vms, images, servers, clusters
+from app.api.endpoints import vms, images, servers, clusters, networks, storage
 
 # Настройка логирования
 logging.basicConfig(
@@ -22,6 +23,19 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_frontend_build_dir() -> str:
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    return os.path.abspath(os.path.join(backend_dir, 'frontend', 'build'))
+
+
+def _get_frontend_index_path() -> str:
+    return os.path.join(_get_frontend_build_dir(), 'index.html')
+
+
+def _frontend_build_exists() -> bool:
+    return os.path.isfile(_get_frontend_index_path())
 
 
 def _get_libvirt_conn() -> libvirt.virConnect:
@@ -71,9 +85,11 @@ app.add_middleware(
 
 # Подключение роутеров
 app.include_router(vms.router, prefix="/api", tags=["vms"])
-app.include_router(images.router, prefix="/api", tags=["images"])
+app.include_router(images.router, prefix="/api/images", tags=["images"])
 app.include_router(servers.router, prefix="/api", tags=["servers"])
 app.include_router(clusters.router, prefix="/api", tags=["clusters"])
+app.include_router(networks.router, prefix="/api", tags=["networks"])
+app.include_router(storage.router, prefix="/api", tags=["storage"])
 
 
 @app.get("/api/vms/{name}/console")
@@ -121,12 +137,34 @@ async def vm_console(name: str):
 @app.get("/")
 async def root():
     """Корневой endpoint"""
+    if _frontend_build_exists():
+        return FileResponse(_get_frontend_index_path())
+
     return {"message": "CEE Hypervisor API v2.0", "status": "running"}
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "CEE Hypervisor"}
+
+
+if _frontend_build_exists():
+    app.mount(
+        "/static",
+        StaticFiles(directory=os.path.join(_get_frontend_build_dir(), "static")),
+        name="frontend-static",
+    )
+
+    @app.get("/{full_path:path}")
+    async def frontend_app(full_path: str):
+        if full_path.startswith("api/") or full_path in {"docs", "redoc", "openapi.json"}:
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        requested_path = os.path.join(_get_frontend_build_dir(), full_path)
+        if full_path and os.path.isfile(requested_path):
+            return FileResponse(requested_path)
+
+        return FileResponse(_get_frontend_index_path())
 
 if __name__ == "__main__":
     uvicorn.run(
