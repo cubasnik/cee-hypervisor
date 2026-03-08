@@ -1,11 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, RotateCcw, Plus, Settings } from 'lucide-react';
+import { Play, Square, RotateCcw, Plus, Settings, Monitor } from 'lucide-react';
 import { apiService } from '../services/api';
+import ActionButton from '../components/ActionButton';
+import AppDialog from '../components/AppDialog';
+import EmptyState from '../components/EmptyState';
+import FormModal from '../components/FormModal';
+import LoadingState from '../components/LoadingState';
+import AppToast from '../components/AppToast';
+import PageActions from '../components/PageActions';
+import RefreshButton from '../components/RefreshButton';
+import StatusMessage from '../components/StatusMessage';
+import { useDialog } from '../hooks/useDialog';
+import { useTimedMessage } from '../hooks/useTimedMessage';
 
 const VirtualMachines = () => {
   const [vms, setVms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createAttempted, setCreateAttempted] = useState(false);
+  const [touchedFields, setTouchedFields] = useState({});
+  const [pendingVmAction, setPendingVmAction] = useState(null);
+  const { dialog, openDialog, closeDialog } = useDialog();
+  const { message: updateMsg, showMessage: showUpdateMessage } = useTimedMessage();
 
   const loadVMs = async () => {
     try {
@@ -13,6 +30,7 @@ const VirtualMachines = () => {
       setError(null);
       const response = await apiService.getVMs();
       setVms(response.data || []);
+      showUpdateMessage('Обновление выполнено');
     } catch (err) {
       setError(
         err.response?.data?.detail ||
@@ -30,7 +48,6 @@ const VirtualMachines = () => {
   }, []);
 
   const getStatusColor = (status) => {
-    const normalized = (status || '').toString().toLowerCase();
     switch (status) {
       case 'running':
       case 'запущена':
@@ -53,49 +70,44 @@ const VirtualMachines = () => {
     return status || 'Неизвестно';
   };
 
-  const handleStart = async (id) => {
+  const runVmAction = async (id, action, request, failureTitle) => {
+    if (pendingVmAction?.id === id) {
+      return;
+    }
+
     try {
-      await apiService.startVM(id);
+      setPendingVmAction({ id, action });
+      await request(id);
       await loadVMs();
     } catch (err) {
-      alert(
-        `Ошибка запуска ВМ: ${
-          err.response?.data?.detail || err.message || 'неизвестная ошибка'
-        }`
-      );
+      openDialog({
+        title: failureTitle,
+        message: err.response?.data?.detail || err.message || 'Неизвестная ошибка',
+        variant: 'danger',
+      });
+    } finally {
+      setPendingVmAction(null);
     }
+  };
+
+  const handleStart = async (id) => {
+    await runVmAction(id, 'start', apiService.startVM, 'Не удалось запустить ВМ');
   };
 
   const handleStop = async (id) => {
-    try {
-      await apiService.stopVM(id);
-      await loadVMs();
-    } catch (err) {
-      alert(
-        `Ошибка остановки ВМ: ${
-          err.response?.data?.detail || err.message || 'неизвестная ошибка'
-        }`
-      );
-    }
+    await runVmAction(id, 'stop', apiService.stopVM, 'Не удалось остановить ВМ');
   };
 
   const handleRestart = async (id) => {
-    try {
-      await apiService.restartVM(id);
-      await loadVMs();
-    } catch (err) {
-      alert(
-        `Ошибка перезапуска ВМ: ${
-          err.response?.data?.detail || err.message || 'неизвестная ошибка'
-        }`
-      );
-    }
+    await runVmAction(id, 'restart', apiService.restartVM, 'Не удалось перезапустить ВМ');
   };
 
   const [showCreate, setShowCreate] = useState(false);
   const [newVm, setNewVm] = useState({ name: '', cpu_cores: 1, memory_mb: 1024, disk_gb: 10 });
 
   const handleCreate = () => {
+    setCreateAttempted(false);
+    setTouchedFields({});
     setShowCreate(true);
   };
 
@@ -104,93 +116,153 @@ const VirtualMachines = () => {
     setNewVm((s) => ({ ...s, [field]: field === 'name' ? value : Number(value) }));
   };
 
+  const createErrors = {
+    name: !newVm.name.trim() ? 'Введите имя виртуальной машины.' : '',
+    cpu_cores: Number(newVm.cpu_cores) < 1 ? 'Укажите хотя бы 1 ядро CPU.' : '',
+    memory_mb: Number(newVm.memory_mb) < 128 ? 'Укажите не меньше 128 MB ОЗУ.' : '',
+    disk_gb: Number(newVm.disk_gb) < 1 ? 'Укажите размер диска не меньше 1 GB.' : '',
+  };
+
+  const hasCreateErrors = Boolean(createErrors.name || createErrors.cpu_cores || createErrors.memory_mb || createErrors.disk_gb);
+
+  const isFieldInvalid = (field) => Boolean((createAttempted || touchedFields[field]) && createErrors[field]);
+
+  const getFieldClassName = (field) => `input w-full${isFieldInvalid(field) ? ' input-error' : ''}`;
+
+  const markFieldTouched = (field) => () => {
+    setTouchedFields((current) => ({ ...current, [field]: true }));
+  };
+
+  const resetCreateValidation = () => {
+    setCreateAttempted(false);
+    setTouchedFields({});
+  };
+
+  const closeCreateModal = () => {
+    if (isCreating) {
+      return;
+    }
+    resetCreateValidation();
+    setShowCreate(false);
+  };
+
+  const isCreateDisabled = hasCreateErrors;
+
   const submitCreate = async () => {
-    if (!newVm.name) {
-      alert('Введите имя ВМ');
+    if (isCreating) {
+      return;
+    }
+
+    setCreateAttempted(true);
+
+    if (hasCreateErrors) {
       return;
     }
     try {
+      setIsCreating(true);
       await apiService.createVM(newVm);
+      resetCreateValidation();
       setShowCreate(false);
       setNewVm({ name: '', cpu_cores: 1, memory_mb: 1024, disk_gb: 10 });
       await loadVMs();
-      alert('ВМ создана');
+      openDialog({
+        title: 'ВМ создана',
+        message: `Виртуальная машина "${newVm.name}" успешно создана.`,
+        variant: 'success',
+      });
     } catch (err) {
-      alert(
-        `Ошибка создания ВМ: ${err.response?.data?.detail || err.message || 'неизвестная ошибка'}`
-      );
+      openDialog({
+        title: 'Не удалось создать ВМ',
+        message: err.response?.data?.detail || err.message || 'Неизвестная ошибка',
+        variant: 'danger',
+      });
+    } finally {
+      setIsCreating(false);
     }
   };
 
   const handleSettings = (vm) => {
-    // Пока просто показываем базовую информацию; позже можно сделать модалку
-    alert(
-      `Настройки ВМ "${vm.name}":\n\n` +
-        `- CPU: ${vm.cpu} ядро(а)\n` +
-        `- Память: ${vm.memory} MB\n` +
-        `- Диск: ${vm.disk} GB\n` +
-        `- Кластер: ${vm.cluster}`
-    );
+    openDialog({
+      title: `Параметры ВМ "${vm.name}"`,
+      message:
+        `Ядра CPU: ${vm.cpu_cores ?? vm.cpu}\n` +
+        `ОЗУ: ${vm.memory_mb ?? vm.memory} MB\n` +
+        `Диск: ${vm.disk} GB\n` +
+        `Кластер: ${vm.cluster}`,
+      variant: 'info',
+    });
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-white">Виртуальные машины</h2>
-        <button onClick={handleCreate} className="btn-primary flex items-center space-x-2">
-          <Plus className="w-4 h-4" />
-          <span>Создать ВМ</span>
-        </button>
-      </div>
+      <AppToast message={updateMsg} />
+      <PageActions>
+        <RefreshButton onClick={loadVMs} loading={loading} />
+        <ActionButton icon={Plus} label="Создать ВМ" onClick={handleCreate} />
+      </PageActions>
 
-      {showCreate && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-60" onClick={() => setShowCreate(false)}></div>
-          <div className="bg-white dark:bg-dark-800 rounded-lg p-6 z-10 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Создать ВМ</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm mb-1">Имя</label>
-                <input className="input w-full" value={newVm.name} onChange={handleCreateChange('name')} />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">CPU (ядра)</label>
-                <input type="number" min="1" className="input w-full" value={newVm.cpu_cores} onChange={handleCreateChange('cpu_cores')} />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">Память (MB)</label>
-                <input type="number" min="128" className="input w-full" value={newVm.memory_mb} onChange={handleCreateChange('memory_mb')} />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">Диск (GB)</label>
-                <input type="number" min="1" className="input w-full" value={newVm.disk_gb} onChange={handleCreateChange('disk_gb')} />
-              </div>
-              <div className="flex justify-end space-x-2 mt-4">
-                <button className="btn" onClick={() => setShowCreate(false)}>Отмена</button>
-                <button className="btn-primary" onClick={submitCreate}>Создать</button>
-              </div>
-            </div>
-          </div>
+      <FormModal
+        isOpen={showCreate}
+        title="Создать ВМ"
+        subtitle="Задайте базовые параметры виртуальной машины."
+        confirmLabel="Создать"
+        confirmBusyLabel="Создание..."
+        isSubmitting={isCreating}
+        confirmDisabled={isCreateDisabled}
+        onClose={closeCreateModal}
+        onConfirm={submitCreate}
+      >
+        <div className="modal-field">
+          <label className="modal-label">Имя</label>
+          <input className={getFieldClassName('name')} value={newVm.name} onChange={handleCreateChange('name')} onBlur={markFieldTouched('name')} />
+          {isFieldInvalid('name') && <p className="text-xs text-red-400">{createErrors.name}</p>}
         </div>
-      )}
+        <div className="modal-field">
+          <label className="modal-label">Ядра CPU</label>
+          <input type="number" min="1" className={getFieldClassName('cpu_cores')} value={newVm.cpu_cores} onChange={handleCreateChange('cpu_cores')} onBlur={markFieldTouched('cpu_cores')} />
+          {isFieldInvalid('cpu_cores') && <p className="text-xs text-red-400">{createErrors.cpu_cores}</p>}
+        </div>
+        <div className="modal-field">
+          <label className="modal-label">ОЗУ (MB)</label>
+          <input type="number" min="128" className={getFieldClassName('memory_mb')} value={newVm.memory_mb} onChange={handleCreateChange('memory_mb')} onBlur={markFieldTouched('memory_mb')} />
+          {isFieldInvalid('memory_mb') && <p className="text-xs text-red-400">{createErrors.memory_mb}</p>}
+        </div>
+        <div className="modal-field">
+          <label className="modal-label">Диск (GB)</label>
+          <input type="number" min="1" className={getFieldClassName('disk_gb')} value={newVm.disk_gb} onChange={handleCreateChange('disk_gb')} onBlur={markFieldTouched('disk_gb')} />
+          {isFieldInvalid('disk_gb') && <p className="text-xs text-red-400">{createErrors.disk_gb}</p>}
+        </div>
+      </FormModal>
+
+      <AppDialog
+        isOpen={dialog.isOpen}
+        title={dialog.title}
+        message={dialog.message}
+        variant={dialog.variant}
+        confirmLabel={dialog.confirmLabel}
+        cancelLabel={dialog.cancelLabel}
+        onConfirm={dialog.onConfirm}
+        onClose={closeDialog}
+      />
 
       <div className="card">
-        {error && (
-          <div className="mb-4 text-sm text-red-400">
-            Ошибка: {error}
-          </div>
-        )}
-        {loading && (
-          <div className="mb-4 text-sm text-dark-300">Загрузка списка ВМ...</div>
-        )}
+        <StatusMessage message={error} className="mb-4" />
+        <LoadingState message={loading ? 'Загрузка списка ВМ...' : ''} className="mb-4" />
+        {vms.length === 0 && !loading ? (
+          <EmptyState
+            icon={Monitor}
+            title="ВМ не найдены"
+            description="Создайте ВМ, чтобы она появилась здесь."
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-700">
                 <th className="text-left py-3 px-4 font-medium text-dark-300">Имя</th>
                 <th className="text-left py-3 px-4 font-medium text-dark-300">Статус</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">CPU</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">ОПеративная память</th>
+                <th className="text-left py-3 px-4 font-medium text-dark-300">Ядра CPU</th>
+                <th className="text-left py-3 px-4 font-medium text-dark-300">ОЗУ</th>
                 <th className="text-left py-3 px-4 font-medium text-dark-300">Диск</th>
                 <th className="text-left py-3 px-4 font-medium text-dark-300">Кластер</th>
                 <th className="text-left py-3 px-4 font-medium text-dark-300">Действия</th>
@@ -213,42 +285,59 @@ const VirtualMachines = () => {
                   <td className="py-3 px-4 text-dark-300">{vm.disk_gb ?? vm.disk} GB</td>
                   <td className="py-3 px-4 text-dark-300">{vm.cluster_id ?? vm.cluster ?? '-'}</td>
                   <td className="py-3 px-4">
+                    {(() => {
+                      const isRowPending = pendingVmAction?.id === vm.id;
+                      const pendingAction = pendingVmAction?.action;
+
+                      return (
                     <div className="flex items-center space-x-2">
                       <button
-                        className="p-1 text-green-400 hover:text-green-300 transition-colors"
-                        title="Запустить"
+                        className={`p-1 transition-colors ${isRowPending ? 'text-dark-500 cursor-not-allowed' : 'text-green-400 hover:text-green-300'}`}
+                        title={isRowPending && pendingAction === 'start' ? 'Запуск...' : 'Запустить'}
                         onClick={() => handleStart(vm.id)}
+                        disabled={isRowPending}
                       >
-                        <Play className="w-4 h-4" />
+                        <Play className={`w-4 h-4 ${isRowPending && pendingAction === 'start' ? 'animate-pulse' : ''}`} />
                       </button>
                       <button
-                        className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                        title="Остановить"
+                        className={`p-1 transition-colors ${isRowPending ? 'text-dark-500 cursor-not-allowed' : 'text-red-400 hover:text-red-300'}`}
+                        title={isRowPending && pendingAction === 'stop' ? 'Остановка...' : 'Остановить'}
                         onClick={() => handleStop(vm.id)}
+                        disabled={isRowPending}
                       >
-                        <Square className="w-4 h-4" />
+                        <Square className={`w-4 h-4 ${isRowPending && pendingAction === 'stop' ? 'animate-pulse' : ''}`} />
                       </button>
                       <button
-                        className="p-1 text-yellow-400 hover:text-yellow-300 transition-colors"
-                        title="Перезапустить"
+                        className={`p-1 transition-colors ${isRowPending ? 'text-dark-500 cursor-not-allowed' : 'text-yellow-400 hover:text-yellow-300'}`}
+                        title={isRowPending && pendingAction === 'restart' ? 'Перезапуск...' : 'Перезапустить'}
                         onClick={() => handleRestart(vm.id)}
+                        disabled={isRowPending}
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className={`w-4 h-4 ${isRowPending && pendingAction === 'restart' ? 'animate-spin' : ''}`} />
                       </button>
                       <button
-                        className="p-1 text-dark-400 hover:text-white transition-colors"
+                        className={`p-1 transition-colors ${isRowPending ? 'text-dark-500 cursor-not-allowed' : 'text-dark-400 hover:text-white'}`}
                         title="Настройки"
                         onClick={() => handleSettings(vm)}
+                        disabled={isRowPending}
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                      {isRowPending && (
+                        <span className="ml-2 text-xs text-dark-400">
+                          {pendingAction === 'start' ? 'Запуск...' : pendingAction === 'stop' ? 'Остановка...' : 'Перезапуск...'}
+                        </span>
+                      )}
                     </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

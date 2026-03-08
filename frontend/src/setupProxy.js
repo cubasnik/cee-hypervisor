@@ -13,7 +13,7 @@ module.exports = function (app) {
   ];
 
   // Choose proxy target from env (useful when running in WSL vs Docker)
-  const proxyTarget = process.env.REACT_APP_PROXY_TARGET || process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  const proxyTarget = process.env.REACT_APP_PROXY_TARGET || process.env.REACT_APP_API_URL || 'http://localhost:8080';
 
   app.use(
     createProxyMiddleware(proxyPaths, {

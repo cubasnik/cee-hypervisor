@@ -4,17 +4,17 @@ import { Settings, User } from 'lucide-react';
 
 const getPageTitle = (pathname) => {
   const titles = {
-    '/': 'Панель индикаторов',
-    '/dashboard': 'Панель индикаторов',
+    '/': 'Панель управления',
+    '/dashboard': 'Панель управления',
     '/clusters': 'Кластеры',
     '/servers': 'Серверы',
     '/vms': 'Виртуальные машины',
     '/images': 'Образы',
-    '/snapshots': 'Снапшоты',
-    '/network': 'Сеть',
-    '/storage': 'Хранилище'
+    '/snapshots': 'Снимки',
+    '/network': 'Сети',
+    '/storage': 'Хранилища'
   };
-  return titles[pathname] || 'Панель индикаторов';
+  return titles[pathname] || 'Панель управления';
 };
 
 const Header = () => {

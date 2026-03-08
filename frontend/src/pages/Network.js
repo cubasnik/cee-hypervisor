@@ -1,65 +1,241 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Network as NetworkIcon, Plus, Wifi, Globe } from 'lucide-react';
+import { apiService } from '../services/api';
+import ActionButton from '../components/ActionButton';
+import AppDialog from '../components/AppDialog';
+import EmptyState from '../components/EmptyState';
+import FormModal from '../components/FormModal';
+import LoadingState from '../components/LoadingState';
+import AppToast from '../components/AppToast';
+import PageActions from '../components/PageActions';
+import RefreshButton from '../components/RefreshButton';
+import StatCard from '../components/StatCard';
+import StatusMessage from '../components/StatusMessage';
+import { useDialog } from '../hooks/useDialog';
+import { useTimedMessage } from '../hooks/useTimedMessage';
 
 const Network = () => {
-  const [networks] = useState([]);
+  const [networks, setNetworks] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createAttempted, setCreateAttempted] = useState(false);
+  const [touchedFields, setTouchedFields] = useState({});
+  const { dialog, openDialog, closeDialog } = useDialog();
+  const { message: updateMsg, showMessage: showUpdateMessage } = useTimedMessage();
+  const [newNetwork, setNewNetwork] = useState({
+    name: '',
+    subnet: '192.168.100.0/24',
+    mode: 'isolated',
+    dhcp_enabled: true,
+  });
+
+  const loadNetworks = useCallback(async (showMessage = true) => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await apiService.getNetworks();
+      setNetworks(Array.isArray(response.data) ? response.data : []);
+      if (showMessage) {
+        showUpdateMessage('Обновление выполнено');
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || 'Ошибка загрузки сетей');
+      setNetworks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [showUpdateMessage]);
+
+  useEffect(() => {
+    loadNetworks(false);
+  }, [loadNetworks]);
+
+  const dhcpEnabledCount = networks.filter((network) => network.dhcp_enabled).length;
+  const routedNetworksCount = networks.filter((network) => network.type === 'nat' || network.type === 'route').length;
+
+  const createErrors = {
+    name: !newNetwork.name.trim() ? 'Укажите имя сети.' : '',
+    subnet: !newNetwork.subnet.trim() ? 'Укажите подсеть.' : '',
+  };
+
+  const hasCreateErrors = Boolean(createErrors.name || createErrors.subnet);
+
+  const isFieldInvalid = (field) => Boolean((createAttempted || touchedFields[field]) && createErrors[field]);
+
+  const getFieldClassName = (field) => `input w-full${isFieldInvalid(field) ? ' input-error' : ''}`;
+
+  const markFieldTouched = (field) => () => {
+    setTouchedFields((current) => ({ ...current, [field]: true }));
+  };
+
+  const resetCreateValidation = () => {
+    setCreateAttempted(false);
+    setTouchedFields({});
+  };
+
+  const openCreateModal = () => {
+    resetCreateValidation();
+    setShowCreate(true);
+  };
+
+  const closeCreateModal = () => {
+    if (isCreating) {
+      return;
+    }
+    resetCreateValidation();
+    setShowCreate(false);
+  };
+
+  const getTypeLabel = (type) => {
+    switch ((type || '').toLowerCase()) {
+      case 'nat':
+        return 'NAT';
+      case 'route':
+        return 'Маршрутизируемая';
+      case 'bridge':
+        return 'Мост';
+      case 'open':
+        return 'Открытая';
+      default:
+        return 'Изолированная';
+    }
+  };
+
+  const handleCreateChange = (field) => (event) => {
+    const value = field === 'dhcp_enabled' ? event.target.checked : event.target.value;
+    setNewNetwork((current) => ({ ...current, [field]: value }));
+  };
+
+  const isCreateDisabled = hasCreateErrors;
+
+  const submitCreate = async () => {
+    if (isCreating) {
+      return;
+    }
+
+    setCreateAttempted(true);
+
+    if (hasCreateErrors) {
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+      await apiService.createNetwork(newNetwork);
+      resetCreateValidation();
+      setShowCreate(false);
+      setNewNetwork({
+        name: '',
+        subnet: '192.168.100.0/24',
+        mode: 'isolated',
+        dhcp_enabled: true,
+      });
+      await loadNetworks(true);
+    } catch (err) {
+      openDialog({
+        title: 'Не удалось создать сеть',
+        message: err.response?.data?.detail || err.message || 'Ошибка создания сети',
+        variant: 'danger',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-white">Сеть</h2>
-        <button className="btn-primary flex items-center space-x-2" disabled>
-          <Plus className="w-4 h-4" />
-          <span>Создать сеть</span>
-        </button>
-      </div>
+      <AppToast message={updateMsg} />
+      <PageActions>
+        <RefreshButton onClick={() => loadNetworks(true)} loading={loading} />
+        <ActionButton icon={Plus} label="Создать сеть" onClick={openCreateModal} />
+      </PageActions>
 
-      {/* Network Overview */}
+      <FormModal
+        isOpen={showCreate}
+        title="Создать сеть"
+        subtitle="Укажите параметры виртуальной сети для libvirt."
+        confirmLabel="Создать"
+        confirmBusyLabel="Создание..."
+        isSubmitting={isCreating}
+        confirmDisabled={isCreateDisabled}
+        onClose={closeCreateModal}
+        onConfirm={submitCreate}
+      >
+        <div className="modal-field">
+          <label className="modal-label">Имя сети</label>
+          <input className={getFieldClassName('name')} value={newNetwork.name} onChange={handleCreateChange('name')} onBlur={markFieldTouched('name')} />
+          {isFieldInvalid('name') && <p className="text-xs text-red-400">{createErrors.name}</p>}
+        </div>
+        <div className="modal-field">
+          <label className="modal-label">Подсеть</label>
+          <input className={getFieldClassName('subnet')} value={newNetwork.subnet} onChange={handleCreateChange('subnet')} onBlur={markFieldTouched('subnet')} />
+          {isFieldInvalid('subnet') && <p className="text-xs text-red-400">{createErrors.subnet}</p>}
+        </div>
+        <div className="modal-field">
+          <label className="modal-label">Тип сети</label>
+          <select className="input w-full" value={newNetwork.mode} onChange={handleCreateChange('mode')}>
+            <option value="isolated">Изолированная</option>
+            <option value="nat">NAT</option>
+            <option value="route">Маршрутизируемая</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-3 rounded-lg border border-dark-700 bg-dark-900/60 px-3 py-3 text-sm text-dark-200">
+          <input type="checkbox" checked={newNetwork.dhcp_enabled} onChange={handleCreateChange('dhcp_enabled')} />
+          <span>Включить DHCP для этой сети</span>
+        </label>
+      </FormModal>
+
+      <AppDialog
+        isOpen={dialog.isOpen}
+        title={dialog.title}
+        message={dialog.message}
+        variant={dialog.variant}
+        confirmLabel={dialog.confirmLabel}
+        cancelLabel={dialog.cancelLabel}
+        onConfirm={dialog.onConfirm}
+        onClose={closeDialog}
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="card">
-          <div className="flex items-center space-x-3 mb-4">
-            <NetworkIcon className="w-6 h-6 text-emerald-400" />
-            <h3 className="text-lg font-semibold text-white">Виртуальные сети</h3>
-          </div>
-          <p className="text-2xl font-bold text-white mb-2">0</p>
-          <p className="text-sm text-dark-400">Сети не настроены</p>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center space-x-3 mb-4">
-            <Wifi className="w-6 h-6 text-blue-400" />
-            <h3 className="text-lg font-semibold text-white">DHCP</h3>
-          </div>
-          <p className="text-2xl font-bold text-white mb-2">Отключен</p>
-          <p className="text-sm text-dark-400">Встроенный DHCP сервер</p>
-        </div>
-
-        <div className="card">
-          <div className="flex items-center space-x-3 mb-4">
-            <Globe className="w-6 h-6 text-purple-400" />
-            <h3 className="text-lg font-semibold text-white">Маршрутизация</h3>
-          </div>
-          <p className="text-2xl font-bold text-white mb-2">Недоступно</p>
-          <p className="text-sm text-dark-400">Виртуальные маршрутизаторы</p>
-        </div>
+        <StatCard
+          title="Виртуальные сети"
+          value={networks.length}
+          subtitle="Доступные виртуальные сети"
+          icon={NetworkIcon}
+          color="text-emerald-400"
+        />
+        <StatCard
+          title="DHCP"
+          value={dhcpEnabledCount}
+          subtitle="Сетей с включенным DHCP"
+          icon={Wifi}
+          color="text-blue-400"
+        />
+        <StatCard
+          title="Маршрутизация"
+          value={routedNetworksCount}
+          subtitle="Маршрутизируемые сети"
+          icon={Globe}
+          color="text-purple-400"
+        />
       </div>
 
-      {/* Networks Table */}
+      <StatusMessage message={error} />
+      <LoadingState message={loading ? 'Загрузка сетей...' : ''} />
+
       <div className="card">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-white">Список сетей</h3>
         </div>
 
-        {networks.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="flex flex-col items-center justify-center text-dark-400">
-              <div className="w-16 h-16 bg-dark-700 rounded-full flex items-center justify-center mb-4">
-                <NetworkIcon className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-medium mb-2">Сети не настроены</h3>
-              <p>Настройка сетей будет доступна в версии 2.2.0</p>
-            </div>
-          </div>
+        {networks.length === 0 && !loading ? (
+          <EmptyState
+            icon={NetworkIcon}
+            title="Сети не найдены"
+            description="Создайте сеть, чтобы она появилась здесь."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -68,12 +244,20 @@ const Network = () => {
                   <th className="text-left py-3 px-4 font-medium text-dark-300">Имя</th>
                   <th className="text-left py-3 px-4 font-medium text-dark-300">Тип</th>
                   <th className="text-left py-3 px-4 font-medium text-dark-300">Подсеть</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Подключено ВМ</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Действия</th>
+                  <th className="text-left py-3 px-4 font-medium text-dark-300">Подключенные ВМ</th>
+                  <th className="text-left py-3 px-4 font-medium text-dark-300">Статус</th>
                 </tr>
               </thead>
               <tbody>
-                {/* Networks will be displayed here */}
+                {networks.map((network) => (
+                  <tr key={network.id} className="border-b border-dark-700 hover:bg-dark-700/50">
+                    <td className="py-3 px-4 text-white">{network.name}</td>
+                    <td className="py-3 px-4 text-dark-300">{getTypeLabel(network.type)}</td>
+                    <td className="py-3 px-4 text-dark-300">{network.subnet}</td>
+                    <td className="py-3 px-4 text-dark-300">{network.connected_vms}</td>
+                    <td className="py-3 px-4 text-dark-300">{network.status === 'online' ? 'Онлайн' : 'Офлайн'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

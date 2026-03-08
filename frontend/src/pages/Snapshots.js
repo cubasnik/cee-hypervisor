@@ -1,31 +1,42 @@
 import React, { useState } from 'react';
 import { Camera, RotateCw, Trash2, Plus } from 'lucide-react';
+import ActionButton from '../components/ActionButton';
+import AppToast from '../components/AppToast';
+import EmptyState from '../components/EmptyState';
+import PageActions from '../components/PageActions';
+import RefreshButton from '../components/RefreshButton';
+import { useTimedMessage } from '../hooks/useTimedMessage';
 
 const Snapshots = () => {
   const [snapshots] = useState([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { message: updateMsg, showMessage: showUpdateMessage } = useTimedMessage();
+
+  const handleRefresh = async () => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    showUpdateMessage('Обновление выполнено');
+    setTimeout(() => setIsRefreshing(false), 400);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-white">Снапшоты</h2>
-        <button className="btn-primary flex items-center space-x-2" disabled>
-          <Plus className="w-4 h-4" />
-          <span>Создать снапшот</span>
-        </button>
-      </div>
+      <AppToast message={updateMsg} />
+      <PageActions>
+        <RefreshButton onClick={handleRefresh} loading={isRefreshing} />
+        <ActionButton icon={Plus} label="Создать снимок" disabled />
+      </PageActions>
 
       <div className="card">
         {snapshots.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="flex flex-col items-center justify-center text-dark-400">
-              <div className="w-16 h-16 bg-dark-700 rounded-full flex items-center justify-center mb-4">
-                <Camera className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-medium mb-2">Нет снапшотов</h3>
-              <p>Снапшоты позволяют сохранять состояние ВМ</p>
-              <p className="text-sm mt-1">Сначала создайте виртуальную машину</p>
-            </div>
-          </div>
+          <EmptyState
+            icon={Camera}
+            title="Снимки не найдены"
+            description="Создайте ВМ и выполните снимок, чтобы он появился здесь."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

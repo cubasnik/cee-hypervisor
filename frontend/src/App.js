@@ -12,7 +12,7 @@ import Storage from './pages/Storage';
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="App bg-dark-900 text-white min-h-screen">
         <Layout>
           <Routes>

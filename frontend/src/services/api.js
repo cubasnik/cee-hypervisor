@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+  // In development, use CRA proxy when REACT_APP_API_URL is not provided.
+  baseURL: process.env.REACT_APP_API_URL || '',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -51,13 +52,15 @@ export const apiService = {
   getVMMetrics: (id, limit = 60) => api.get(`/api/vms/${id}/metrics?limit=${limit}`),
   
   // Images
-  getImages: () => api.get('/api/images'),
-  uploadImage: (formData) => api.post('/api/images/upload', formData, {
+  getImages: () => api.get('/api/images/', { params: { _: Date.now() } }),
+  uploadImage: (formData, onUploadProgress) => api.post('/api/images/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    onUploadProgress,
   }),
   uploadImageByURL: (url) => api.post('/api/images/upload-url', { url }),
+  importImagesFromDirectory: (path) => api.post('/api/images/import-directory', { path }),
   deleteImage: (id) => api.delete(`/api/images/${id}`),
   
   // Servers
@@ -76,6 +79,14 @@ export const apiService = {
   deleteCluster: (id) => api.delete(`/api/clusters/${id}`),
   addHostToCluster: (clusterId, hostData) => api.post(`/api/clusters/${clusterId}/hosts`, hostData),
   removeHostFromCluster: (clusterId, hostId) => api.delete(`/api/clusters/${clusterId}/hosts/${hostId}`),
+
+  // Networks
+  getNetworks: () => api.get('/api/networks'),
+  createNetwork: (data) => api.post('/api/networks', data),
+
+  // Storage
+  getStorage: () => api.get('/api/storage'),
+  createStorageVolume: (data) => api.post('/api/storage/volumes', data),
   
   // Snapshots
   getSnapshots: (vmId) => api.get(`/api/vms/${vmId}/snapshots`),
