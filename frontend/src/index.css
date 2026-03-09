@@ -29,6 +29,14 @@
     @apply bg-dark-700 hover:bg-dark-600 text-white font-medium py-2 px-4 rounded-lg border border-dark-600 transition-colors duration-200;
   }
 
+  .page-toolbar-button {
+    @apply border border-dark-600 bg-dark-700 text-sky-300 hover:bg-dark-600 hover:text-sky-200;
+  }
+
+  .page-toolbar-button:disabled {
+    @apply text-sky-300/60;
+  }
+
   .input {
     @apply bg-dark-900 border border-dark-600 text-white rounded-lg px-3 py-2 outline-none transition-colors duration-200;
   }
@@ -50,35 +58,155 @@
   }
 
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6;
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-5 backdrop-blur-sm sm:py-8;
   }
 
   .modal-panel {
-    @apply relative w-full max-w-md rounded-2xl border border-dark-700 bg-dark-800 p-6 shadow-2xl;
+    @apply relative w-full max-w-lg overflow-hidden rounded-3xl border border-dark-700/90 bg-dark-800/95 shadow-2xl ring-1 ring-white/5;
+  }
+
+  .modal-header {
+    @apply border-b border-dark-700/80 px-5 py-4 sm:px-6 sm:py-5;
+  }
+
+  .modal-body {
+    @apply px-5 py-4 sm:px-6 sm:py-5;
   }
 
   .modal-title {
-    @apply text-xl font-semibold text-white;
+    @apply text-[1.15rem] font-semibold leading-tight tracking-tight text-white sm:text-xl;
   }
 
   .modal-subtitle {
-    @apply mt-1 text-sm text-dark-300;
+    @apply mt-2 text-sm leading-6 text-dark-300;
   }
 
   .modal-field {
-    @apply space-y-2;
+    @apply space-y-2.5;
+  }
+
+  .modal-field .input {
+    @apply min-h-[44px] w-full;
   }
 
   .modal-label {
-    @apply block text-sm font-medium text-dark-200;
+    @apply block text-[11px] font-semibold uppercase tracking-[0.08em] text-dark-300;
+  }
+
+  .modal-hint {
+    @apply text-xs leading-5 text-dark-400;
+  }
+
+  .modal-error {
+    @apply text-xs leading-5 text-red-300;
+  }
+
+  .modal-checkbox {
+    @apply flex items-center gap-3 rounded-xl border border-dark-700 bg-dark-900/60 px-4 py-3 text-sm text-dark-200;
+  }
+
+  .modal-checkbox input[type='checkbox'] {
+    @apply h-4 w-4 rounded border-dark-500 bg-dark-900 text-sky-400 focus:ring-2 focus:ring-sky-400/30;
+  }
+
+  .modal-note {
+    @apply rounded-xl border px-4 py-3 text-xs leading-5;
+  }
+
+  .modal-assist {
+    @apply rounded-xl border border-dark-700 bg-dark-900/50 px-4 py-4;
+  }
+
+  .modal-assist-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-300;
+  }
+
+  .modal-assist-text {
+    @apply text-sm leading-6 text-dark-300;
+  }
+
+  .modal-assist-presets {
+    @apply mt-3 flex flex-wrap gap-2;
+  }
+
+  .modal-preset-button {
+    @apply inline-flex min-h-[40px] min-w-[96px] flex-col items-start justify-center rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-left text-sm text-dark-100 transition-colors duration-200 hover:border-sky-500/40 hover:bg-dark-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .modal-preset-button.is-active {
+    @apply border-sky-400/70 bg-sky-500/10 text-white shadow-[0_0_0_1px_rgba(56,189,248,0.28)] hover:border-sky-300 hover:bg-sky-500/20;
+  }
+
+  .modal-preset-button.is-active .modal-preset-caption {
+    @apply text-sky-100;
+  }
+
+  .modal-preset-caption {
+    @apply mt-1 text-xs leading-4 text-dark-400;
+  }
+
+  .modal-assist-list {
+    @apply mt-3 space-y-2;
+  }
+
+  .modal-assist-tip {
+    @apply text-xs leading-5 text-dark-300;
   }
 
   .modal-actions {
-    @apply mt-6 flex justify-end gap-3 border-t border-dark-700 pt-4;
+    @apply flex flex-col-reverse gap-3 border-t border-dark-700/80 px-5 py-4 sm:flex-row sm:justify-end sm:px-6 sm:py-5;
   }
   
   .card {
     @apply bg-dark-800 rounded-lg border border-dark-700 p-6;
+  }
+
+  .table-header-cell {
+    @apply py-3 px-4 font-medium text-[#6b3f6f];
+  }
+
+  .table-header-cell-tight-left {
+    @apply py-3 pl-2 pr-4 font-medium text-[#6b3f6f];
+  }
+
+  .table-header-cell-right {
+    @apply py-3 px-4 text-right font-medium text-[#6b3f6f];
+  }
+
+  .table-cell {
+    @apply py-3 px-4;
+  }
+
+  .table-cell-strong {
+    @apply py-3 px-4 text-white;
+  }
+
+  .table-cell-muted {
+    @apply py-3 px-4 text-dark-300;
+  }
+
+  .table-cell-actions {
+    @apply py-3 px-4 text-right;
+  }
+
+  .table-actions-row {
+    @apply flex flex-wrap justify-end gap-2;
+  }
+
+  .table-action-button {
+    @apply inline-flex min-h-[38px] min-w-[84px] items-center justify-center gap-2 px-3 py-2 text-sm;
+  }
+
+  .table-action-button-compact {
+    @apply min-w-[72px];
+  }
+
+  .table-action-icon-button {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200;
+  }
+
+  .table-action-icon {
+    @apply h-4 w-4;
   }
   
   .sidebar-item {

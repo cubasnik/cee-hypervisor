@@ -215,7 +215,7 @@ const Images = () => {
       }
       setImages(res.data);
       if (showMessage) {
-        showUpdateMessage('Обновление выполнено');
+        showUpdateMessage('Данные обновлены');
       }
     } catch (e) {
       if (fetchRequestRef.current !== requestId) {
@@ -301,8 +301,8 @@ const Images = () => {
       fetchImages({ showMessage: false, silent: true });
     } catch (error) {
       openDialog({
-        title: 'Не удалось загрузить файл',
-        message: error.response?.data?.detail || 'Ошибка загрузки файла.',
+        title: 'Не удалось загрузить образ',
+        message: error.response?.data?.detail || error.message || 'Неизвестная ошибка.',
         variant: 'danger',
       });
     } finally {
@@ -352,8 +352,8 @@ const Images = () => {
     } catch (error) {
       clearInterval(progressInterval);
       openDialog({
-        title: 'Не удалось загрузить по URL',
-        message: error.response?.data?.detail || 'Ошибка загрузки файла по URL.',
+        title: 'Не удалось загрузить образ по URL',
+        message: error.response?.data?.detail || error.message || 'Неизвестная ошибка.',
         variant: 'danger',
       });
     } finally {
@@ -396,8 +396,8 @@ const Images = () => {
       }));
       fetchImages({ showMessage: false, silent: true });
       openDialog({
-        title: 'Импорт завершён',
-        message: 'Результат импорта из выбранной папки.',
+        title: 'Импорт образов завершен',
+        message: 'Показан результат импорта из выбранной папки.',
         content: buildImportSummaryContent(response.data),
         variant: 'success',
         panelClassName: 'max-w-4xl',
@@ -405,8 +405,8 @@ const Images = () => {
     } catch (error) {
       clearInterval(progressInterval);
       openDialog({
-        title: 'Не удалось импортировать папку',
-        message: error.response?.data?.detail || 'Ошибка импорта образов из папки.',
+        title: 'Не удалось импортировать образы',
+        message: error.response?.data?.detail || error.message || 'Неизвестная ошибка.',
         variant: 'danger',
       });
     } finally {
@@ -420,8 +420,8 @@ const Images = () => {
   const handleDeleteImage = async (id) => {
     if (!id) return;
     openDialog({
-      title: 'Удалить образ',
-      message: 'Образ будет удален из проекта. Это действие нельзя отменить.',
+      title: `Удалить образ ${id}?`,
+      message: `Образ ${id} будет удален из проекта. Это действие нельзя отменить.`,
       variant: 'warning',
       confirmLabel: 'Удалить',
       cancelLabel: 'Отмена',
@@ -434,7 +434,7 @@ const Images = () => {
         } catch (e) {
           openDialog({
             title: 'Не удалось удалить образ',
-            message: 'Ошибка удаления образа.',
+            message: e.response?.data?.detail || e.message || 'Неизвестная ошибка.',
             variant: 'danger',
           });
         }
@@ -501,7 +501,7 @@ const Images = () => {
                   <p className="text-xs text-red-400">{fileError}</p>
                 )}
               </div>
-              <label className={`btn-primary min-h-[48px] w-full flex cursor-pointer items-center justify-center space-x-2 ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+              <label className={`btn-primary page-toolbar-button min-h-[48px] w-full flex cursor-pointer items-center justify-center space-x-2 ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
                 {activeUpload === 'file' ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
@@ -549,7 +549,7 @@ const Images = () => {
               <button 
                 onClick={handleUrlUpload}
                 disabled={isLoading || Boolean(urlError)}
-                className="btn-primary min-h-[48px] w-full flex items-center justify-center space-x-2 disabled:opacity-50"
+                className="btn-primary page-toolbar-button min-h-[48px] w-full flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 {activeUpload === 'url' ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -589,7 +589,7 @@ const Images = () => {
               <button
                 onClick={handleDirectoryImport}
                 disabled={isLoading || Boolean(folderError)}
-                className="btn-primary min-h-[48px] w-full flex items-center justify-center space-x-2 disabled:opacity-50"
+                className="btn-primary page-toolbar-button min-h-[48px] w-full flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 {activeUpload === 'folder' ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -609,11 +609,11 @@ const Images = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-700">
-                <th className="text-left py-3 px-4 font-medium text-dark-300">#</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">Имя файла</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">Размер</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">Тип</th>
-                <th className="text-left py-3 px-4 font-medium text-dark-300">Действия</th>
+                <th className="table-header-cell text-left">#</th>
+                <th className="table-header-cell text-left">Имя файла</th>
+                <th className="table-header-cell text-left">Размер</th>
+                <th className="table-header-cell text-left">Тип</th>
+                <th className="table-header-cell-right">Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -631,32 +631,34 @@ const Images = () => {
               ) : (
                 images.map((image, index) => (
                   <tr key={image.id || (image.name + '-' + index)} className="border-b border-dark-700 hover:bg-dark-700/50">
-                    <td className="py-3 px-4 text-dark-300">{index + 1}</td>
-                    <td className="py-3 px-4 text-white">{image.name}</td>
-                    <td className="py-3 px-4 text-dark-300">{formatSize(image.size)}</td>
-                    <td className="py-3 px-4">
+                    <td className="table-cell-muted">{index + 1}</td>
+                    <td className="table-cell-strong">{image.name}</td>
+                    <td className="table-cell-muted">{formatSize(image.size)}</td>
+                    <td className="table-cell">
                       <span className="px-2 py-1 bg-primary-600 text-white text-xs rounded">
                         {image.type}
                       </span>
                     </td>
-                    <td className="py-3 px-4 flex gap-2">
-                      <a
-                        href={"/api/images/download?name=" + encodeURIComponent(image.name)}
-                        className="p-1 text-blue-400 hover:text-blue-300 transition-colors"
-                        title="Скачать"
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
-                      <button 
-                        className="p-1 text-red-400 hover:text-red-300 transition-colors"
-                        onClick={() => handleDeleteImage(image.name)}
-                        title="Удалить"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="table-cell-actions">
+                      <div className="table-actions-row">
+                        <a
+                          href={"/api/images/download?name=" + encodeURIComponent(image.name)}
+                          className="table-action-icon-button text-blue-400 hover:text-blue-300"
+                          title={`Скачать образ ${image.name}`}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Download className="table-action-icon" />
+                        </a>
+                        <button 
+                          className="table-action-icon-button text-red-400 hover:text-red-300"
+                          onClick={() => handleDeleteImage(image.name)}
+                          title={`Удалить образ ${image.name}`}
+                        >
+                          <Trash2 className="table-action-icon" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import ActionButton from '../components/ActionButton';
 import AppDialog from '../components/AppDialog';
 import EmptyState from '../components/EmptyState';
+import FormInlineHelp from '../components/FormInlineHelp';
 import FormModal from '../components/FormModal';
 import LoadingState from '../components/LoadingState';
 import AppToast from '../components/AppToast';
@@ -14,12 +15,48 @@ import StatusMessage from '../components/StatusMessage';
 import { useDialog } from '../hooks/useDialog';
 import { useTimedMessage } from '../hooks/useTimedMessage';
 
+const getNextPresetName = (baseName, existingNames) => {
+  const normalizedNames = new Set(existingNames.map((name) => String(name || '').toLowerCase()));
+  if (!normalizedNames.has(baseName.toLowerCase())) {
+    return baseName;
+  }
+
+  let suffix = 2;
+  while (normalizedNames.has(`${baseName}-${suffix}`.toLowerCase())) {
+    suffix += 1;
+  }
+
+  return `${baseName}-${suffix}`;
+};
+
+const NETWORK_PRESET_CONFIG = {
+  isolated: {
+    name: 'net-isolated',
+    subnet: '192.168.100.0/24',
+    mode: 'isolated',
+    dhcp_enabled: true,
+  },
+  nat: {
+    name: 'net-nat',
+    subnet: '192.168.122.0/24',
+    mode: 'nat',
+    dhcp_enabled: true,
+  },
+  route: {
+    name: 'net-route',
+    subnet: '10.10.10.0/24',
+    mode: 'route',
+    dhcp_enabled: false,
+  },
+};
+
 const Network = () => {
   const [networks, setNetworks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedNetworkPreset, setSelectedNetworkPreset] = useState('isolated');
   const [createAttempted, setCreateAttempted] = useState(false);
   const [touchedFields, setTouchedFields] = useState({});
   const { dialog, openDialog, closeDialog } = useDialog();
@@ -75,8 +112,18 @@ const Network = () => {
     setTouchedFields({});
   };
 
+  const buildNetworkPresetForm = useCallback((presetId) => {
+    const preset = NETWORK_PRESET_CONFIG[presetId] || NETWORK_PRESET_CONFIG.isolated;
+    return {
+      ...preset,
+      name: getNextPresetName(preset.name, networks.map((network) => network.name)),
+    };
+  }, [networks]);
+
   const openCreateModal = () => {
     resetCreateValidation();
+    setSelectedNetworkPreset('isolated');
+    setNewNetwork(buildNetworkPresetForm('isolated'));
     setShowCreate(true);
   };
 
@@ -105,7 +152,14 @@ const Network = () => {
 
   const handleCreateChange = (field) => (event) => {
     const value = field === 'dhcp_enabled' ? event.target.checked : event.target.value;
+    setSelectedNetworkPreset('');
     setNewNetwork((current) => ({ ...current, [field]: value }));
+  };
+
+  const applyNetworkPreset = (presetId) => {
+    resetCreateValidation();
+    setSelectedNetworkPreset(presetId);
+    setNewNetwork(buildNetworkPresetForm(presetId));
   };
 
   const isCreateDisabled = hasCreateErrors;
@@ -125,6 +179,7 @@ const Network = () => {
       setIsCreating(true);
       await apiService.createNetwork(newNetwork);
       resetCreateValidation();
+      setSelectedNetworkPreset('isolated');
       setShowCreate(false);
       setNewNetwork({
         name: '',
@@ -163,15 +218,29 @@ const Network = () => {
         onClose={closeCreateModal}
         onConfirm={submitCreate}
       >
+        <FormInlineHelp
+          title="Быстрые пресеты сети"
+          description="Выберите типовую схему, чтобы сразу заполнить режим, подсеть и DHCP."
+          selectedPreset={selectedNetworkPreset}
+          presets={[
+            { id: 'isolated', label: 'Изолированная', description: 'net-isolated, 192.168.100.0/24', onClick: () => applyNetworkPreset('isolated') },
+            { id: 'nat', label: 'NAT', description: 'net-nat, 192.168.122.0/24', onClick: () => applyNetworkPreset('nat') },
+            { id: 'route', label: 'Route', description: 'net-route, 10.10.10.0/24', onClick: () => applyNetworkPreset('route') },
+          ]}
+          tips={[
+            'NAT подходит для быстрого выхода ВМ наружу без ручной маршрутизации.',
+            'Изолированная сеть удобна для внутренних стендов и тестов.',
+          ]}
+        />
         <div className="modal-field">
           <label className="modal-label">Имя сети</label>
-          <input className={getFieldClassName('name')} value={newNetwork.name} onChange={handleCreateChange('name')} onBlur={markFieldTouched('name')} />
-          {isFieldInvalid('name') && <p className="text-xs text-red-400">{createErrors.name}</p>}
+          <input className={getFieldClassName('name')} value={newNetwork.name} onChange={handleCreateChange('name')} onBlur={markFieldTouched('name')} placeholder="Например: net-private" />
+          {isFieldInvalid('name') && <p className="modal-error">{createErrors.name}</p>}
         </div>
         <div className="modal-field">
           <label className="modal-label">Подсеть</label>
-          <input className={getFieldClassName('subnet')} value={newNetwork.subnet} onChange={handleCreateChange('subnet')} onBlur={markFieldTouched('subnet')} />
-          {isFieldInvalid('subnet') && <p className="text-xs text-red-400">{createErrors.subnet}</p>}
+          <input className={getFieldClassName('subnet')} value={newNetwork.subnet} onChange={handleCreateChange('subnet')} onBlur={markFieldTouched('subnet')} placeholder="Например: 192.168.100.0/24" />
+          {isFieldInvalid('subnet') && <p className="modal-error">{createErrors.subnet}</p>}
         </div>
         <div className="modal-field">
           <label className="modal-label">Тип сети</label>
@@ -181,7 +250,7 @@ const Network = () => {
             <option value="route">Маршрутизируемая</option>
           </select>
         </div>
-        <label className="flex items-center gap-3 rounded-lg border border-dark-700 bg-dark-900/60 px-3 py-3 text-sm text-dark-200">
+        <label className="modal-checkbox">
           <input type="checkbox" checked={newNetwork.dhcp_enabled} onChange={handleCreateChange('dhcp_enabled')} />
           <span>Включить DHCP для этой сети</span>
         </label>
@@ -241,21 +310,21 @@ const Network = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-dark-700">
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Имя</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Тип</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Подсеть</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Подключенные ВМ</th>
-                  <th className="text-left py-3 px-4 font-medium text-dark-300">Статус</th>
+                  <th className="table-header-cell text-left">Имя</th>
+                  <th className="table-header-cell text-left">Тип</th>
+                  <th className="table-header-cell text-left">Подсеть</th>
+                  <th className="table-header-cell text-left">Подключенные ВМ</th>
+                  <th className="table-header-cell text-left">Статус</th>
                 </tr>
               </thead>
               <tbody>
                 {networks.map((network) => (
                   <tr key={network.id} className="border-b border-dark-700 hover:bg-dark-700/50">
-                    <td className="py-3 px-4 text-white">{network.name}</td>
-                    <td className="py-3 px-4 text-dark-300">{getTypeLabel(network.type)}</td>
-                    <td className="py-3 px-4 text-dark-300">{network.subnet}</td>
-                    <td className="py-3 px-4 text-dark-300">{network.connected_vms}</td>
-                    <td className="py-3 px-4 text-dark-300">{network.status === 'online' ? 'Онлайн' : 'Офлайн'}</td>
+                    <td className="table-cell-strong">{network.name}</td>
+                    <td className="table-cell-muted">{getTypeLabel(network.type)}</td>
+                    <td className="table-cell-muted">{network.subnet}</td>
+                    <td className="table-cell-muted">{network.connected_vms}</td>
+                    <td className="table-cell-muted">{network.status === 'online' ? 'Онлайн' : 'Офлайн'}</td>
                   </tr>
                 ))}
               </tbody>

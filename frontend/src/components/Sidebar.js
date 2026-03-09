@@ -47,7 +47,7 @@ const menuItems = [
   },
   {
     path: '/snapshots',
-    name: 'Снимки',
+    name: 'Резервные копии',
     icon: Camera,
     color: 'text-yellow-400'
   },

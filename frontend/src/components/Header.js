@@ -10,7 +10,7 @@ const getPageTitle = (pathname) => {
     '/servers': 'Серверы',
     '/vms': 'Виртуальные машины',
     '/images': 'Образы',
-    '/snapshots': 'Снимки',
+    '/snapshots': 'Резервные копии',
     '/network': 'Сети',
     '/storage': 'Хранилища'
   };
