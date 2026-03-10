@@ -8,6 +8,7 @@ import LoadingState from '../components/LoadingState';
 import PageActions from '../components/PageActions';
 import RefreshButton from '../components/RefreshButton';
 import StatusMessage from '../components/StatusMessage';
+import FormModal from '../components/FormModal';
 import { useTimedMessage } from '../hooks/useTimedMessage';
 
 const formatMemoryGb = (memoryMb) => {
@@ -26,6 +27,31 @@ const Clusters = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { message: updateMsg, showMessage: showUpdateMessage } = useTimedMessage();
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [formData, setFormData] = useState({ name: '', type: 'local', description: '' });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setCreating(true);
+      await apiService.createCluster(formData);
+      showUpdateMessage('Кластер успешно добавлен');
+      setIsCreateModalOpen(false);
+      setFormData({ name: '', type: 'local', description: '' });
+      loadClusters(false);
+    } catch (err) {
+      alert(err.response?.data?.detail || err.message || 'Ошибка добавления кластера');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const loadClusters = useCallback(async (showMessage = true) => {
     try {
@@ -211,6 +237,74 @@ const Clusters = () => {
         </div>
       </div>
       )}
+      
+      <FormModal
+        isOpen={isCreateModalOpen}
+        onClose={() => !creating && setIsCreateModalOpen(false)}
+        title="Добавить новый кластер"
+      >
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Имя кластера <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              value={formData.name}
+              onChange={handleInputChange}
+              placeholder="Например: cluster-m1"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Тип
+            </label>
+            <select
+              name="type"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              value={formData.type}
+              onChange={handleInputChange}
+            >
+              <option value="local">Локальный (local)</option>
+              <option value="zfs">Хранилище ZFS (zfs)</option>
+              <option value="ceph">Кластер Ceph (ceph)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Описание
+            </label>
+            <textarea
+              name="description"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              value={formData.description}
+              onChange={handleInputChange}
+              placeholder="Необязательно..."
+              rows={2}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(false)}
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              disabled={creating}
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 transition-colors"
+              disabled={creating || !formData.name}
+            >
+              {creating ? 'Добавление...' : 'Добавить кластер'}
+            </button>
+          </div>
+        </form>
+      </FormModal>
     </div>
   );
 };
